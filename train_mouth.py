@@ -26,6 +26,8 @@ from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
 from utils.camera_utils import loadCamOnTheFly
 import copy
+import gc
+import tracemalloc
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -76,7 +78,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     progress_bar = tqdm(range(first_iter, opt.iterations), ascii=True, dynamic_ncols=True, desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):        
-
+        gc.collect()
+        current, peak = tracemalloc.get_traced_memory()
+        print(f"Memory usage: {current / 10**6:.2f} MB; Peak: {peak / 10**6:.2f} MB")
         iter_start.record()
 
         gaussians.update_learning_rate(iteration)

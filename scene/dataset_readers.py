@@ -25,6 +25,7 @@ import pandas as pd
 from utils.sh_utils import SH2RGB
 from utils.audio_utils import get_audio_features
 from scene.gaussian_model import BasicPointCloud
+import gc
 
 class CameraInfo(NamedTuple):
     uid: int
@@ -108,6 +109,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
         
         if audio_file == '':
             aud_features = np.load(os.path.join(path, 'aud_{}.npy'.format(postfix_dict[audio_extractor])))
+            # aud_features = np.load(os.path.join(path, 'aud.npy'))
         else:
             aud_features = np.load(audio_file)
         aud_features = torch.from_numpy(aud_features)
@@ -115,15 +117,15 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
         auds = aud_features
 
         au_info=pd.read_csv(os.path.join(path, 'au.csv'))
-        au_blink = au_info[' AU45_r'].values
-        au25 = au_info[' AU25_r'].values
+        au_blink = au_info['AU45_r'].values
+        au25 = au_info['AU25_r'].values
         au25 = np.clip(au25, 0, np.percentile(au25, 95))
 
         au25_25, au25_50, au25_75, au25_100 = np.percentile(au25, 25), np.percentile(au25, 50), np.percentile(au25, 75), au25.max()
 
         au_exp = []
         for i in [1,4,5,6,7,45]:
-            _key = ' AU' + str(i).zfill(2) + '_r'
+            _key = 'AU' + str(i).zfill(2) + '_r'
             au_exp_t = au_info[_key].values
             if i == 45:
                 au_exp_t = au_exp_t.clip(0, 2)
@@ -157,8 +159,16 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
         mouth_ub = (ldmks_mouth[:, 1] - ldmks_mouth[:, 0]).max()
 
 
-
+        import tracemalloc
+        import psutil
+        tracemalloc.start()
         for idx, frame in tqdm(enumerate(frames)):
+            if idx % 100 == 0:
+                current, peak = tracemalloc.get_traced_memory()
+                print(f"Memory usage: {current / 1024 / 1024:.2f} MB; Peak: {peak / 1024 / 1024:.2f} MB") 
+                mem = psutil.virtual_memory()
+                total_memory = mem.total / 1024 / 1024 / 1024 
+                print(f"Total memory: {total_memory:.2f} GB")
             cam_name = os.path.join(path, 'gt_imgs', str(frame["img_id"]) + extension)
 
             # NeRF 'transform_matrix' is a camera-to-world transform
@@ -221,7 +231,6 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
 
             talking_dict['au_exp'] = torch.as_tensor(au_exp[frame['img_id']])
 
-
             [xmin, xmax, ymin, ymax] = ldmks_lips[idx].tolist()
             # padding to H == W
             cx = (xmin + xmax) // 2
@@ -248,6 +257,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
 
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                             image_path=image_path, image_name=image_name, width=w, height=h, background=bg, talking_dict=talking_dict))
+
 
             # if idx > 200: break
             # if idx > 6500: break
